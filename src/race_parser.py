@@ -9,7 +9,7 @@ class RaceParser:
     @staticmethod
     def parse_race(race_type, year, identifier, page, debug=False):
         if debug:
-            print(f"Начало парсинга: {race_type}, {year}, {identifier}, стр. {page}")
+            print(f"Start of parsing: {race_type}, {year}, {identifier}, page {page}")
         
         if race_type == "daily":
             url = f"{RaceParser.BASE_URL}/daily/{year}/{identifier[0]}/{identifier[1]}/{page}"
@@ -17,32 +17,29 @@ class RaceParser:
             url = f"{RaceParser.BASE_URL}/weekly/{year}/{identifier}/{page}"
         
         if debug:
-            print(f"Формирование URL: {url}")
+            print(f"URL generation: {url}")
         
         try:
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             
             if debug:
-                print(f"HTTP статус: {response.status_code}")
-                print(f"Размер ответа: {len(response.text)} байт")
+                print(f"HTTP status: {response.status_code}")
+                print(f"Response size: {len(response.text)} байт")
             
             soup = BeautifulSoup(response.text, 'html.parser')
 
             no_scores = soup.find('div', class_=re.compile(r'text-center'))
             if no_scores and "No scores!" in no_scores.get_text():
                 if debug:
-                    print("Обнаружено 'No scores' - участников нет")
+                    print("No scores detected - no participants")
                 return []
             
             participants = []
             score_plates = soup.find_all('div', class_='score_plate')
 
             if debug:
-                print(f"Найдено записей: {len(score_plates)}")
-                if score_plates:
-                    print("Пример HTML записи:")
-                    print(score_plates[0].prettify()[:500] + "...")
+                print(f"Records found: {len(score_plates)}")
             
             for plate in score_plates:
                 try:
@@ -54,11 +51,15 @@ class RaceParser:
                     level_spans = plate.select('div.flex.flex-col.gap-1 span')
                     distance = " ".join(span.get_text(strip=True) for span in level_spans) if level_spans else "N/A"
 
-                    kills_div = plate.select_one('div.nt-text-shadow.text-right')
-                    kills = kills_div.get_text(strip=True) if kills_div else "N/A"
+                    kills_div = plate.select_one('div.hidden.sm\\:flex div.nt-text-shadow.text-right')
+
+                    if not kills_div:
+                        kills_div = plate.select_one('div.flex.sm\\:hidden div.nt-text-shadow')
+                    
+                    kills = kills_div.get_text(strip=True).replace(',', '') if kills_div else "N/A"
                     
                     if debug:
-                        print(f"  Участник: rank={rank}, name={name}, distance={distance}, kills={kills}")
+                        print(f"Participant: rank={rank}, name={name}, distance={distance}, kills={kills}")
                     
                     participants.append({
                         'rank': rank,
@@ -68,15 +69,15 @@ class RaceParser:
                     })
                 except Exception as e:
                     if debug:
-                        print(f"Ошибка обработки элемента: {str(e)}")
+                        print(f"Error processing element: {str(e)}")
                     continue
                 
             return participants
         except Exception as e:
             if debug:
-                print(f"Ошибка парсинга: {str(e)}")
+                print(f"Parsing error: {str(e)}")
                 import traceback
                 traceback.print_exc()
-            messagebox.showerror("Ошибка", f"Ошибка при получении данных: {str(e)}")
+            messagebox.showerror("Error", f"Error receiving data: {str(e)}")
             return None
         
