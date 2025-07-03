@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import datetime
+import asyncio
+import threading
 import csv
 import openpyxl
 from openpyxl.styles import Font
@@ -8,7 +10,6 @@ from openpyxl.utils import get_column_letter
 
 from src.race_parser import RaceParser
 from src.locale_manager import LocaleManager
-
 class RaceApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -149,7 +150,7 @@ class RaceApp(tk.Tk):
 
         self.export_type_label = ttk.Label(self.input_frame, text=self.locale.tr('export_type'))
         self.export_type_label.grid(row=0, column=8, padx=5, pady=5, sticky=tk.W)
-        self.export_type = ttk.Combobox(self.input_frame, values=["xlsx", "csv"], state="readonly", width=5)
+        self.export_type = ttk.Combobox(self.input_frame, values=["xlsx", "csv", "txt"], state="readonly", width=5)
         self.export_type.current(0)
         self.export_type.grid(row=0, column=9, padx=5, pady=5)
 
@@ -208,6 +209,26 @@ class RaceApp(tk.Tk):
             self.day.config(state=tk.DISABLED)
     
     def load_data(self):
+        threading.Thread(
+            target=self.run_async_task, 
+            args=(self.async_load_data(),),
+            daemon=True
+        ).start()
+    
+    def run_async_task(self, coro):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(coro)
+        except Exception as e:
+            self.after(0, lambda: messagebox.showerror(
+                self.locale.tr('error_title'), 
+                f"Error: {str(e)}"
+            ))
+        finally:
+            loop.close()
+    
+    async def async_load_data(self):
         race_type = self.race_type.get()
         year = self.year.get().strip()
         page = self.page.get().strip()
@@ -220,38 +241,36 @@ class RaceApp(tk.Tk):
             print(f"All pages mode: {all_pages}")
         
         if not year:
-            messagebox.showwarning(
+            self.after(0, lambda: messagebox.showwarning(
                 self.locale.tr('error_title'), 
                 self.locale.tr('year_required')
-            )
+            ))
             return
         
         if race_type == "daily":
             month = self.month.get().strip()
             day = self.day.get().strip()
             if not month or not day:
-                messagebox.showwarning(
+                self.after(0, lambda: messagebox.showwarning(
                     self.locale.tr('error_title'), 
                     self.locale.tr('month_day_required')
-                )
+                ))
                 return
             identifier = (month, day)
         else:
             week = self.week.get().strip()
             if not week:
-                messagebox.showwarning(
+                self.after(0, lambda: messagebox.showwarning(
                     self.locale.tr('error_title'), 
                     self.locale.tr('week_required')
-                )
+                ))
                 return
             identifier = week
 
         self.participants_data = []
         
         if all_pages:
-            self.status_var.set(self.locale.tr('loading_all'))
-            self.update_idletasks()
-            
+            self.update_status(self.locale.tr('loading_all'))
             page = 1
             total_participants = 0
             
@@ -259,10 +278,15 @@ class RaceApp(tk.Tk):
                 if debug:
                     print(f"Loading page {page}...")
                 
-                self.status_var.set(self.locale.tr('loading_page', page=page))
-                self.update_idletasks()
+                self.update_status(self.locale.tr('loading_page', page=page))
                 
-                participants = RaceParser.parse_race(race_type, year, identifier, page, debug)
+                try:
+                    participants = await RaceParser.parse_race(
+                        race_type, year, identifier, page, debug
+                    )
+                except Exception as e:
+                    self.update_status(str(e))
+                    break
                 
                 if participants is None:
                     break
@@ -280,39 +304,48 @@ class RaceApp(tk.Tk):
                 
                 page += 1
             
-            self.status_var.set(self.locale.tr(
+            self.update_status(self.locale.tr(
                 'loaded_participants', 
                 count=total_participants, 
                 pages=page-1
             ))
         else:
             if not page:
-                messagebox.showwarning(
+                self.after(0, lambda: messagebox.showwarning(
                     self.locale.tr('error_title'), 
                     self.locale.tr('page_required')
-                )
+                ))
                 return
             
-            self.status_var.set(self.locale.tr('loading_page', page=page))
-            self.update_idletasks()
+            self.update_status(self.locale.tr('loading_page', page=page))
             
-            participants = RaceParser.parse_race(race_type, year, identifier, page, debug)
-            if participants is not None:
-                self.participants_data = participants
-                self.status_var.set(self.locale.tr('loaded_participants', 
-                    count=len(participants), 
-                    pages=1
-                ))
+            try:
+                participants = await RaceParser.parse_race(race_type, year, identifier, page, debug)
+                if participants is not None:
+                    self.participants_data = participants
+                    self.update_status(self.locale.tr('loaded_participants', 
+                        count=len(participants), 
+                        pages=1
+                    ))
+            except Exception as e:
+                self.update_status(str(e))
         
         if self.participants_data:
-            self.display_data(self.participants_data)
-            
+            self.update_display()
             if debug:
                 print(f"Total participants loaded: {len(self.participants_data)}")
         else:
-            self.tree.delete(*self.tree.get_children())
-            self.status_var.set(self.locale.tr('no_participants'))
-
+            self.update_status(self.locale.tr('no_participants'))
+    
+    def update_status(self, message):
+        self.after(0, lambda: self.status_var.set(message))
+    
+    def update_display(self):
+        self.after(0, self.display_current_data)
+    
+    def display_current_data(self):
+        self.display_data(self.participants_data)
+    
     def export_data(self):
         if not self.participants_data:
             messagebox.showwarning(
@@ -335,8 +368,10 @@ class RaceApp(tk.Tk):
         try:
             if file_type == "xlsx":
                 self.export_to_xlsx(file_path)
-            else:
+            elif file_type == "csv":
                 self.export_to_csv(file_path)
+            elif file_type == "txt":
+                self.export_to_txt(file_path)
                 
             messagebox.showinfo(
                 self.locale.tr('export_success'),
@@ -394,6 +429,23 @@ class RaceApp(tk.Tk):
                     participant['distance'],
                     participant['kills']
                 ])
+
+    def export_to_txt(self, file_path):
+        with open(file_path, 'w', newline='', encoding='utf-8') as txtfile:            
+            txtfile.write(
+                self.locale.tr('rank') + '\t' +
+                self.locale.tr('participant') + '\t' +
+                self.locale.tr('distance') + '\t' +
+                self.locale.tr('kills') + '\n'
+            )
+            
+            for participant in self.participants_data:
+                txtfile.write(
+                    participant['rank'] + '\t' +
+                    participant['name'] + '\t' +
+                    participant['distance'] + '\t' +
+                    participant['kills'] + '\n'
+                )
     
     def display_data(self, data):
         self.tree.delete(*self.tree.get_children())
