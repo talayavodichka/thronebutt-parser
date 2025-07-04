@@ -36,7 +36,8 @@
   "file_menu": "File",
   "language_menu": "Language",
   "exit_menu": "Exit",
-  "russian": "Russian",
+  "russian": "Русский",
   "english": "English",
-  "chinese": "Chinese"
+  "chinese": "中文",
+  "japanese": "日本語"
 }

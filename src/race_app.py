@@ -48,7 +48,11 @@ class RaceApp(tk.Tk):
         )
         self.language_menu.add_command(
             label=self.locale.tr('chinese'), 
-            command=lambda: self.change_language('zh')
+            command=lambda: self.change_language('cn')
+        )
+        self.language_menu.add_command(
+            label=self.locale.tr('japanese'), 
+            command=lambda: self.change_language('jp')
         )
         self.menubar.add_cascade(
             label=self.locale.tr('language_menu'), 

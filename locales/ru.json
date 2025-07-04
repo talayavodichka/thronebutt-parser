@@ -37,6 +37,7 @@
   "language_menu": "Язык",
   "exit_menu": "Выход",
   "russian": "Русский",
-  "english": "Английский",
-  "chinese": "Китайский"
+  "english": "English",
+  "chinese": "中文",
+  "japanese": "日本語"
 }
