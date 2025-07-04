@@ -60,11 +60,13 @@
   "top_distance_count": "Топ {count} по дистанции",
   "top_kills_count": "Топ {count} по убийствам",
   "distance_vs_kills_count": "Дистанция vs Убийства (Топ {count})",
+  "no_valid_data": "Нет валидных данных",
   "no_valid_distance": "Нет корректных данных по дистанции",
   "no_valid_kills": "Нет корректных данных по убийствам",
   "graph_saved": "График сохранен: {path}",
   "save_error": "Ошибка сохранения",
   "success": "Успешно",
   "error": "Ошибка",
-  "participant_results": "Результаты участников"
+  "participant_results": "Результаты участников",
+  "total_levels": "Всего уровней"
 }

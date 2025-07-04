@@ -242,7 +242,22 @@ class RaceApp(tk.Tk):
         
         self.graph_type_label = ttk.Label(self.analysis_frame, text=self.locale.tr('graph_type'))
         self.graph_type_label.grid(row=0, column=0, padx=5, pady=5)
-        self.graph_type = ttk.Combobox(self.analysis_frame, state="readonly", width=20)
+        
+        graph_types = [
+            self.locale.tr('distance_distribution'),
+            self.locale.tr('kills_distribution'),
+            self.locale.tr('top_distance'),
+            self.locale.tr('top_kills'),
+            self.locale.tr('distance_vs_kills')
+        ]
+        
+        self.graph_type = ttk.Combobox(
+            self.analysis_frame, 
+            values=graph_types,
+            state="readonly", 
+            width=20
+        )
+        self.graph_type.current(0)
         self.graph_type.grid(row=0, column=1, padx=5, pady=5)
         
         self.top_count_label = ttk.Label(self.analysis_frame, text=self.locale.tr('top_count'))
@@ -575,16 +590,111 @@ class RaceApp(tk.Tk):
         except Exception as e:
             self.analysis_status.set(f"{self.locale.tr('graph_error')}: {str(e)}")
     
+    def parse_distance(self, distance_str):
+        if not distance_str:
+            return 0
+        try:
+            parts = distance_str.split()
+            stage_level = parts[0]
+            loop = 0
+
+            if len(parts) > 1 and parts[1].startswith('L'):
+                loop = int(parts[1][1:])
+            
+            if stage_level == 'END?':
+                stage, level = 7, 4
+            elif stage_level == '???':
+                return 0
+            elif '-' in stage_level:
+                stage, level = map(int, stage_level.split('-'))
+            else:
+                return 0
+
+            base_levels = (stage - 1) * 3 + level
+
+            if stage == 7 and level == 4:
+                base_levels = 21
+
+            total_levels = loop * 21 + base_levels
+            return total_levels
+            
+        except (ValueError, IndexError):
+            return 0
+
     def plot_distance_distribution(self):
         ax = self.figure.add_subplot(111)
-        distances = [self.parse_number(p['distance']) for p in self.participants_data]
+        distances = [self.parse_distance(p['distance']) for p in self.participants_data]
+
         distances = [d for d in distances if d > 0]
+        
         if not distances:
             raise ValueError(self.locale.tr('no_valid_distance'))
-        ax.hist(distances, bins=100, color='skyblue', edgecolor='black')
+        
+        ax.hist(distances, bins=30, color='skyblue', edgecolor='black')
         ax.set_title(self.locale.tr('distance_distribution'))
-        ax.set_xlabel(self.locale.tr('distance'))
+        ax.set_xlabel(self.locale.tr('total_levels'))
         ax.set_ylabel(self.locale.tr('participant_count'))
+        ax.grid(True, linestyle='--', alpha=0.7)
+
+    def plot_top_distance(self, top_count):
+        valid_participants = [
+            p for p in self.participants_data 
+            if self.parse_distance(p['distance']) > 0
+        ]
+        
+        if not valid_participants:
+            raise ValueError(self.locale.tr('no_valid_distance'))
+
+        sorted_data = sorted(
+            valid_participants,
+            key=lambda x: self.parse_distance(x['distance']),
+            reverse=True
+        )[:top_count]
+        
+        names = [p['name'][:20] + ('...' if len(p['name']) > 20 else '') for p in sorted_data]
+        distances = [self.parse_distance(p['distance']) for p in sorted_data]
+        
+        ax = self.figure.add_subplot(111)
+        y_pos = np.arange(len(names))
+        
+        ax.barh(y_pos, distances, color='lightgreen')
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names)
+        ax.invert_yaxis()
+        ax.set_title(self.locale.tr('top_distance', count=top_count))
+        ax.set_xlabel(self.locale.tr('total_levels'))
+        ax.grid(True, axis='x', linestyle='--', alpha=0.7)
+
+    def plot_distance_vs_kills(self, top_count):
+        valid_participants = [
+            p for p in self.participants_data 
+            if self.parse_distance(p['distance']) > 0 and self.parse_number(p['kills']) > 0
+        ]
+        
+        if not valid_participants:
+            raise ValueError(self.locale.tr('no_valid_data'))
+
+        sorted_data = sorted(
+            valid_participants,
+            key=lambda x: self.parse_distance(x['distance']),
+            reverse=True
+        )[:top_count]
+        
+        names = [p['name'][:15] + ('...' if len(p['name']) > 15 else '') for p in sorted_data]
+        distances = [self.parse_distance(p['distance']) for p in sorted_data]
+        kills = [self.parse_number(p['kills']) for p in sorted_data]
+        
+        ax = self.figure.add_subplot(111)
+        x_pos = np.arange(len(names))
+        width = 0.35
+        
+        ax.bar(x_pos - width/2, distances, width, label=self.locale.tr('total_levels'), color='skyblue')
+        ax.bar(x_pos + width/2, kills, width, label=self.locale.tr('kills'), color='salmon')
+        
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(names, rotation=45, ha='right')
+        ax.set_title(self.locale.tr('distance_vs_kills', count=top_count))
+        ax.legend()
         ax.grid(True, linestyle='--', alpha=0.7)
     
     def plot_kills_distribution(self):
@@ -598,24 +708,6 @@ class RaceApp(tk.Tk):
         ax.set_xlabel(self.locale.tr('kills'))
         ax.set_ylabel(self.locale.tr('participant_count'))
         ax.grid(True, linestyle='--', alpha=0.7)
-    
-    def plot_top_distance(self, top_count):
-        sorted_data = sorted(
-            self.participants_data,
-            key=lambda x: self.parse_number(x['distance']),
-            reverse=True
-        )[:top_count]
-        names = [p['name'][:20] + ('...' if len(p['name']) > 20 else '') for p in sorted_data]
-        distances = [self.parse_number(p['distance']) for p in sorted_data]
-        ax = self.figure.add_subplot(111)
-        y_pos = np.arange(len(names))
-        ax.barh(y_pos, distances, color='lightgreen')
-        ax.set_yticks(y_pos)
-        ax.set_yticklabels(names)
-        ax.invert_yaxis()
-        ax.set_title(self.locale.tr('top_distance', count=top_count))
-        ax.set_xlabel(self.locale.tr('distance'))
-        ax.grid(True, axis='x', linestyle='--', alpha=0.7)
     
     def plot_top_kills(self, top_count):
         sorted_data = sorted(
@@ -634,26 +726,6 @@ class RaceApp(tk.Tk):
         ax.set_title(self.locale.tr('top_kills', count=top_count))
         ax.set_xlabel(self.locale.tr('kills'))
         ax.grid(True, axis='x', linestyle='--', alpha=0.7)
-    
-    def plot_distance_vs_kills(self, top_count):
-        sorted_data = sorted(
-            self.participants_data,
-            key=lambda x: self.parse_number(x['distance']),
-            reverse=True
-        )[:top_count]
-        names = [p['name'][:15] + ('...' if len(p['name']) > 15 else '') for p in sorted_data]
-        distances = [self.parse_number(p['distance']) for p in sorted_data]
-        kills = [self.parse_number(p['kills']) for p in sorted_data]
-        ax = self.figure.add_subplot(111)
-        x_pos = np.arange(len(names))
-        width = 0.35
-        ax.bar(x_pos - width/2, distances, width, label=self.locale.tr('distance'), color='skyblue')
-        ax.bar(x_pos + width/2, kills, width, label=self.locale.tr('kills'), color='salmon')
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(names, rotation=45, ha='right')
-        ax.set_title(self.locale.tr('distance_vs_kills', count=top_count))
-        ax.legend()
-        ax.grid(True, linestyle='--', alpha=0.7)
     
     def parse_number(self, value):
         if isinstance(value, (int, float)):
