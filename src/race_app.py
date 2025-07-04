@@ -7,16 +7,20 @@ import csv
 import openpyxl
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
 
 from src.race_parser import RaceParser
 from src.locale_manager import LocaleManager
+
 class RaceApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.locale = LocaleManager()
         self.title(self.locale.tr('app_title'))
-        self.geometry("900x600")
-        self.resizable(False, False)
+        self.geometry("1000x700")
+        self.resizable(True, True)
         self.participants_data = []
         self.debug_mode = tk.BooleanVar(value=False)
         self.all_pages_mode = tk.BooleanVar(value=False)
@@ -90,10 +94,33 @@ class RaceApp(tk.Tk):
         self.tree.heading("kills", text=self.locale.tr('kills'))
         
         self.status_var.set(self.locale.tr('status_ready'))
+        
+        self.notebook.tab(0, text=self.locale.tr('data_tab'))
+        self.notebook.tab(1, text=self.locale.tr('analysis_tab'))
+        
+        self.analysis_frame.config(text=self.locale.tr('graph_controls'))
+        self.graph_type_label.config(text=self.locale.tr('graph_type'))
+        self.top_count_label.config(text=self.locale.tr('top_count'))
+        self.plot_button.config(text=self.locale.tr('plot_graph'))
+        self.save_button.config(text=self.locale.tr('save_graph'))
+        self.analysis_status.set(self.locale.tr('analysis_ready'))
+        
+        graph_types = [
+            self.locale.tr('distance_distribution'),
+            self.locale.tr('kills_distribution'),
+            self.locale.tr('top_distance'),
+            self.locale.tr('top_kills'),
+            self.locale.tr('distance_vs_kills')
+        ]
+        self.graph_type['values'] = graph_types
+        self.graph_type.current(0)
     
     def create_widgets(self):
-        main_frame = ttk.Frame(self, padding=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        main_frame = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(main_frame, text=self.locale.tr('data_tab'))
         
         self.input_frame = ttk.LabelFrame(main_frame, text=self.locale.tr('input_params'))
         self.input_frame.pack(fill=tk.X, pady=5)
@@ -204,6 +231,54 @@ class RaceApp(tk.Tk):
         
         self.race_type.bind("<<ComboboxSelected>>", self.update_input_fields)
         self.update_input_fields()
+        
+        analysis_tab = ttk.Frame(self.notebook)
+        self.notebook.add(analysis_tab, text=self.locale.tr('analysis_tab'))
+        self.create_analysis_tab(analysis_tab)
+    
+    def create_analysis_tab(self, parent):
+        self.analysis_frame = ttk.LabelFrame(parent, text=self.locale.tr('graph_controls'))
+        self.analysis_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.graph_type_label = ttk.Label(self.analysis_frame, text=self.locale.tr('graph_type'))
+        self.graph_type_label.grid(row=0, column=0, padx=5, pady=5)
+        self.graph_type = ttk.Combobox(self.analysis_frame, state="readonly", width=20)
+        self.graph_type.grid(row=0, column=1, padx=5, pady=5)
+        
+        self.top_count_label = ttk.Label(self.analysis_frame, text=self.locale.tr('top_count'))
+        self.top_count_label.grid(row=0, column=2, padx=5, pady=5)
+        self.top_count = ttk.Spinbox(self.analysis_frame, from_=5, to=100, width=5)
+        self.top_count.set(20)
+        self.top_count.grid(row=0, column=3, padx=5, pady=5)
+        
+        self.plot_button = ttk.Button(
+            self.analysis_frame, 
+            text=self.locale.tr('plot_graph'),
+            command=self.plot_graph
+        )
+        self.plot_button.grid(row=0, column=4, padx=10, pady=5)
+        
+        self.analysis_status = tk.StringVar(value=self.locale.tr('analysis_ready'))
+        ttk.Label(self.analysis_frame, textvariable=self.analysis_status).grid(
+            row=0, column=5, padx=10, pady=5, sticky=tk.W
+        )
+        
+        self.graph_frame = ttk.Frame(parent)
+        self.graph_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.figure = plt.figure(figsize=(8, 5), dpi=100)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.graph_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        save_frame = ttk.Frame(parent)
+        save_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.save_button = ttk.Button(
+            save_frame,
+            text=self.locale.tr('save_graph'),
+            command=self.save_graph
+        )
+        self.save_button.pack(side=tk.RIGHT, padx=5, pady=5)
     
     def update_input_fields(self, event=None):
         race_type = self.race_type.get()
@@ -473,3 +548,152 @@ class RaceApp(tk.Tk):
         
         filtered = [p for p in self.participants_data if query in p['name'].lower()]
         self.display_data(filtered)
+    
+    def plot_graph(self):
+        if not self.participants_data:
+            self.analysis_status.set(self.locale.tr('no_data_for_analysis'))
+            return
+            
+        try:
+            self.figure.clear()
+            graph_type = self.graph_type.get()
+            top_count = int(self.top_count.get())
+            
+            if graph_type == self.locale.tr('distance_distribution'):
+                self.plot_distance_distribution()
+            elif graph_type == self.locale.tr('kills_distribution'):
+                self.plot_kills_distribution()
+            elif graph_type == self.locale.tr('top_distance'):
+                self.plot_top_distance(top_count)
+            elif graph_type == self.locale.tr('top_kills'):
+                self.plot_top_kills(top_count)
+            elif graph_type == self.locale.tr('distance_vs_kills'):
+                self.plot_distance_vs_kills(top_count)
+                
+            self.canvas.draw()
+            self.analysis_status.set(self.locale.tr('graph_plotted'))
+        except Exception as e:
+            self.analysis_status.set(f"{self.locale.tr('graph_error')}: {str(e)}")
+    
+    def plot_distance_distribution(self):
+        ax = self.figure.add_subplot(111)
+        distances = [self.parse_number(p['distance']) for p in self.participants_data]
+        distances = [d for d in distances if d > 0]
+        if not distances:
+            raise ValueError(self.locale.tr('no_valid_distance'))
+        ax.hist(distances, bins=100, color='skyblue', edgecolor='black')
+        ax.set_title(self.locale.tr('distance_distribution'))
+        ax.set_xlabel(self.locale.tr('distance'))
+        ax.set_ylabel(self.locale.tr('participant_count'))
+        ax.grid(True, linestyle='--', alpha=0.7)
+    
+    def plot_kills_distribution(self):
+        ax = self.figure.add_subplot(111)
+        kills = [self.parse_number(p['kills']) for p in self.participants_data]
+        kills = [k for k in kills if k > 0]
+        if not kills:
+            raise ValueError(self.locale.tr('no_valid_kills'))
+        ax.hist(kills, bins=30, color='salmon', edgecolor='black')
+        ax.set_title(self.locale.tr('kills_distribution'))
+        ax.set_xlabel(self.locale.tr('kills'))
+        ax.set_ylabel(self.locale.tr('participant_count'))
+        ax.grid(True, linestyle='--', alpha=0.7)
+    
+    def plot_top_distance(self, top_count):
+        sorted_data = sorted(
+            self.participants_data,
+            key=lambda x: self.parse_number(x['distance']),
+            reverse=True
+        )[:top_count]
+        names = [p['name'][:20] + ('...' if len(p['name']) > 20 else '') for p in sorted_data]
+        distances = [self.parse_number(p['distance']) for p in sorted_data]
+        ax = self.figure.add_subplot(111)
+        y_pos = np.arange(len(names))
+        ax.barh(y_pos, distances, color='lightgreen')
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names)
+        ax.invert_yaxis()
+        ax.set_title(self.locale.tr('top_distance', count=top_count))
+        ax.set_xlabel(self.locale.tr('distance'))
+        ax.grid(True, axis='x', linestyle='--', alpha=0.7)
+    
+    def plot_top_kills(self, top_count):
+        sorted_data = sorted(
+            self.participants_data,
+            key=lambda x: self.parse_number(x['kills']),
+            reverse=True
+        )[:top_count]
+        names = [p['name'][:20] + ('...' if len(p['name']) > 20 else '') for p in sorted_data]
+        kills = [self.parse_number(p['kills']) for p in sorted_data]
+        ax = self.figure.add_subplot(111)
+        y_pos = np.arange(len(names))
+        ax.barh(y_pos, kills, color='gold')
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names)
+        ax.invert_yaxis()
+        ax.set_title(self.locale.tr('top_kills', count=top_count))
+        ax.set_xlabel(self.locale.tr('kills'))
+        ax.grid(True, axis='x', linestyle='--', alpha=0.7)
+    
+    def plot_distance_vs_kills(self, top_count):
+        sorted_data = sorted(
+            self.participants_data,
+            key=lambda x: self.parse_number(x['distance']),
+            reverse=True
+        )[:top_count]
+        names = [p['name'][:15] + ('...' if len(p['name']) > 15 else '') for p in sorted_data]
+        distances = [self.parse_number(p['distance']) for p in sorted_data]
+        kills = [self.parse_number(p['kills']) for p in sorted_data]
+        ax = self.figure.add_subplot(111)
+        x_pos = np.arange(len(names))
+        width = 0.35
+        ax.bar(x_pos - width/2, distances, width, label=self.locale.tr('distance'), color='skyblue')
+        ax.bar(x_pos + width/2, kills, width, label=self.locale.tr('kills'), color='salmon')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(names, rotation=45, ha='right')
+        ax.set_title(self.locale.tr('distance_vs_kills', count=top_count))
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.7)
+    
+    def parse_number(self, value):
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            cleaned = ''.join(ch for ch in str(value) if ch.isdigit() or ch in ['.', '-'])
+            return float(cleaned) if cleaned else 0.0
+        except ValueError:
+            return 0.0
+    
+    def save_graph(self):
+        if not self.participants_data:
+            messagebox.showwarning(
+                self.locale.tr('no_data'),
+                self.locale.tr('no_data_for_analysis')
+            )
+            return
+            
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[
+                ("PNG files", "*.png"),
+                ("JPEG files", "*.jpg"),
+                ("PDF files", "*.pdf"),
+                ("All files", "*.*")
+            ],
+            title=self.locale.tr('save_graph')
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            self.figure.savefig(file_path, bbox_inches='tight', dpi=100)
+            messagebox.showinfo(
+                self.locale.tr('success'),
+                self.locale.tr('graph_saved', path=file_path)
+            )
+        except Exception as e:
+            messagebox.showerror(
+                self.locale.tr('error'),
+                f"{self.locale.tr('save_error')}: {str(e)}"
+            )
