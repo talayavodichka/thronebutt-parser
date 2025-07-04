@@ -80,9 +80,7 @@ class RaceApp(tk.Tk):
         self.day_label.config(text=self.locale.tr('day'))
         self.week_label.config(text=self.locale.tr('week'))
         self.page_label.config(text=self.locale.tr('page'))
-        self.export_type_label.config(text=self.locale.tr('export_type'))
         self.load_button.config(text=self.locale.tr('load_data'))
-        self.export_button.config(text=self.locale.tr('export_data'))
         self.debug_check.config(text=self.locale.tr('debug_mode'))
         self.all_pages_check.config(text=self.locale.tr('all_pages'))
         self.search_label.config(text=self.locale.tr('search_participant'))
@@ -97,6 +95,7 @@ class RaceApp(tk.Tk):
         
         self.notebook.tab(0, text=self.locale.tr('data_tab'))
         self.notebook.tab(1, text=self.locale.tr('analysis_tab'))
+        self.notebook.tab(2, text=self.locale.tr('export_tab'))
         
         self.analysis_frame.config(text=self.locale.tr('graph_controls'))
         self.graph_type_label.config(text=self.locale.tr('graph_type'))
@@ -104,6 +103,10 @@ class RaceApp(tk.Tk):
         self.plot_button.config(text=self.locale.tr('plot_graph'))
         self.save_button.config(text=self.locale.tr('save_graph'))
         self.analysis_status.set(self.locale.tr('analysis_ready'))
+        
+        self.export_frame.config(text=self.locale.tr('export_settings'))
+        self.export_type_label.config(text=self.locale.tr('export_type'))
+        self.export_button.config(text=self.locale.tr('export_data'))
         
         graph_types = [
             self.locale.tr('distance_distribution'),
@@ -183,19 +186,6 @@ class RaceApp(tk.Tk):
         )
         self.all_pages_check.grid(row=1, column=10, padx=10, pady=5)
 
-        self.export_type_label = ttk.Label(self.input_frame, text=self.locale.tr('export_type'))
-        self.export_type_label.grid(row=0, column=8, padx=5, pady=5, sticky=tk.W)
-        self.export_type = ttk.Combobox(self.input_frame, values=["xlsx", "csv", "txt"], state="readonly", width=5)
-        self.export_type.current(0)
-        self.export_type.grid(row=0, column=9, padx=5, pady=5)
-
-        self.export_button = ttk.Button(
-            self.input_frame, 
-            text=self.locale.tr('export_data'), 
-            command=self.export_data
-        )
-        self.export_button.grid(row=0, column=10, padx=5, pady=5)
-
         self.status_var = tk.StringVar(value=self.locale.tr('status_ready'))
         status_label = ttk.Label(self.input_frame, textvariable=self.status_var)
         status_label.grid(row=2, column=0, columnspan=14, sticky=tk.W, padx=5, pady=5)
@@ -235,6 +225,10 @@ class RaceApp(tk.Tk):
         analysis_tab = ttk.Frame(self.notebook)
         self.notebook.add(analysis_tab, text=self.locale.tr('analysis_tab'))
         self.create_analysis_tab(analysis_tab)
+        
+        export_tab = ttk.Frame(self.notebook)
+        self.notebook.add(export_tab, text=self.locale.tr('export_tab'))
+        self.create_export_tab(export_tab)
     
     def create_analysis_tab(self, parent):
         self.analysis_frame = ttk.LabelFrame(parent, text=self.locale.tr('graph_controls'))
@@ -294,6 +288,24 @@ class RaceApp(tk.Tk):
             command=self.save_graph
         )
         self.save_button.pack(side=tk.RIGHT, padx=5, pady=5)
+
+    def create_export_tab(self, parent):
+        self.export_frame = ttk.LabelFrame(parent, text=self.locale.tr('export_settings'))
+        self.export_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.export_type_label = ttk.Label(self.export_frame, text=self.locale.tr('export_type'))
+        self.export_type_label.grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        
+        self.export_type = ttk.Combobox(self.export_frame, values=["xlsx", "csv", "txt"], state="readonly", width=5)
+        self.export_type.current(0)
+        self.export_type.grid(row=0, column=1, padx=5, pady=5)
+        
+        self.export_button = ttk.Button(
+            self.export_frame, 
+            text=self.locale.tr('export_data'), 
+            command=self.export_data
+        )
+        self.export_button.grid(row=0, column=2, padx=5, pady=5)
     
     def update_input_fields(self, event=None):
         race_type = self.race_type.get()
@@ -769,3 +781,4 @@ class RaceApp(tk.Tk):
                 self.locale.tr('error'),
                 f"{self.locale.tr('save_error')}: {str(e)}"
             )
+            
