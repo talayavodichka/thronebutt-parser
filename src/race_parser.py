@@ -3,12 +3,12 @@ from bs4 import BeautifulSoup
 import re
 
 class RaceParser:
-    BASE_URL = "https://beta.thronebutt.com"
+    BASE_URL = "https://thronebutt.com"
     
     @staticmethod
     async def get_participants(url, debug):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as response:
+            async with session.get(url) as response:
                 response.raise_for_status()
                 text = await response.text()
     
